@@ -16,6 +16,26 @@ AI generates supertext → Chispita executes commands → project files updated
 
 ---
 
+## Installation / Instalación
+
+**EN:**
+1. Install Python 3 from [python.org](https://python.org)
+2. Open a terminal in the project folder and run:
+```
+pip install click
+```
+3. Double-click `gui.py` to launch the app.
+
+**ES:**
+1. Instalá Python 3 desde [python.org](https://python.org)
+2. Abrí una terminal en la carpeta del proyecto y ejecutá:
+```
+pip install click
+```
+3. Hacé doble click en `gui.py` para abrir la aplicación.
+
+---
+
 ## Commands / Comandos
 
 | Command | Action |
