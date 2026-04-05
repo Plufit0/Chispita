@@ -13,6 +13,7 @@ AI generates supertext → Chispita executes commands → project files updated
       ↑                                                         |
       └─────────── Chispita exports project data ──────────────┘
 ```
+<img width="954" height="782" alt="imagen" src="https://github.com/user-attachments/assets/d1ff0d08-42e3-49e2-a986-ac2dbcc070a2" />
 
 ---
 
