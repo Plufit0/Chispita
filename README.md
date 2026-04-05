@@ -16,7 +16,7 @@ AI generates supertext → Chispita executes commands → project files updated
 
 ## Screenshot
 
-<img width="953" height="783" alt="imagen" src="https://github.com/user-attachments/assets/8fd625cd-38ff-4825-8f45-2601b40586cd" />
+<img width="952" height="782" alt="imagen" src="https://github.com/user-attachments/assets/71a34087-03dd-4bbd-9b41-47775221abb3" />
 
 ## Commands
 
