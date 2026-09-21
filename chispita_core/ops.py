@@ -27,6 +27,14 @@ import fnmatch
 import hashlib
 import shutil
 from datetime import datetime
+from chispita_core.i18n import translator
+
+
+def _t(clave, **kw):
+    """Traduce y formatea un texto de resultado (idioma según CHISPITA_LANG)."""
+    txt = translator.get(clave)
+    return txt.format(**kw) if kw else txt
+
 
 # --- Papelera de reciclaje (opcional, con fallback) ---
 try:
@@ -214,7 +222,7 @@ def registrar_log(accion, cantidad, detalle, estado='ok'):
     if not ruta:
         return
     ts = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    linea = f"{ts} | {accion} | {cantidad} archivos | {detalle} | {estado}\n"
+    linea = f"{ts} | {accion} | {cantidad} files | {detalle} | {estado}\n"
     try:
         with open(ruta, 'a', encoding='utf-8') as f:
             f.write(linea)
@@ -228,7 +236,7 @@ def registrar_log(accion, cantidad, detalle, estado='ok'):
 def export_inventory(ruta_base, mods):
     ruta = os.path.abspath(ruta_base) if ruta_base else os.path.abspath('.')
     if not os.path.exists(ruta):
-        return {'ok': False, 'contenido': f"[ERROR] INVENTORY: '{ruta}' no existe.",
+        return {'ok': False, 'contenido': _t('ops_err_no_exist', cmd='INVENTORY', ruta=ruta),
                 'results': [], 'affected': 0, 'blocked': False}
 
     campo_fecha = (mods.get('by') or 'mtime').strip().lower()
@@ -288,16 +296,17 @@ def _inventory_group_extension(filas, mods):
                      key_name=lambda x: x['ext'])
     formato = (mods.get('format') or 'text').strip().lower()
     if formato == 'csv':
-        contenido = _csv_de([{'extension': i['ext'], 'archivos': i['count'],
-                              'bytes': i['size'], 'tamaño': human_size(i['size'])}
+        contenido = _csv_de([{'extension': i['ext'], 'files': i['count'],
+                              'bytes': i['size'], 'size': human_size(i['size'])}
                              for i in items])
     elif formato == 'json':
         import json
         contenido = json.dumps(items, ensure_ascii=False, indent=2)
     else:
-        lineas = ["--- INVENTARIO POR EXTENSIÓN ---"]
+        abbr = _t('ops_files_abbr')
+        lineas = [_t('ops_inv_ext_title')]
         for i in items:
-            lineas.append(f"{i['ext']:>12}  {i['count']:>6} archivos  {human_size(i['size']):>10}")
+            lineas.append(f"{i['ext']:>12}  {i['count']:>6} {abbr}  {human_size(i['size']):>10}")
         contenido = "\n".join(lineas)
     return {'ok': True, 'contenido': contenido, 'results': items,
             'affected': len(items), 'blocked': False}
@@ -310,7 +319,7 @@ def _render_inventory(filas, formato, campo_fecha, con_hash):
         import json
         return json.dumps(filas, ensure_ascii=False, indent=2)
     # texto
-    lineas = [f"--- INVENTARIO ({len(filas)} archivos) ---"]
+    lineas = [_t('ops_inv_title', n=len(filas))]
     for f in filas:
         extra = f"  {f['hash']}" if con_hash and f.get('hash') else ""
         lineas.append(f"{f['size_h']:>10}  {f['mtime']}  {f['path']}{extra}")
@@ -362,9 +371,9 @@ def _quizas_output_to(contenido, mods, ruta, prefijo='export'):
         ruta_salida = os.path.join(exports_dir, destino)
         with open(ruta_salida, 'w', encoding='utf-8', newline='') as f:
             f.write(contenido)
-        return f"[OK] Resultado escrito en exports/{destino} ({len(contenido)} bytes)."
+        return _t('ops_output_ok', destino=destino, n=len(contenido))
     except Exception as e:
-        return f"[WARN] No se pudo escribir output_to='{destino}': {e}\n\n{contenido}"
+        return _t('ops_output_fail', destino=destino, e=e) + f"\n\n{contenido}"
 
 
 # ==========================================================================
@@ -373,7 +382,7 @@ def _quizas_output_to(contenido, mods, ruta, prefijo='export'):
 def export_sizes(ruta_base, mods):
     ruta = os.path.abspath(ruta_base) if ruta_base else os.path.abspath('.')
     if not os.path.exists(ruta):
-        return {'ok': False, 'contenido': f"[ERROR] SIZES: '{ruta}' no existe.",
+        return {'ok': False, 'contenido': _t('ops_err_no_exist', cmd='SIZES', ruta=ruta),
                 'results': [], 'affected': 0, 'blocked': False}
 
     depth = mods.get('depth')
@@ -388,33 +397,34 @@ def export_sizes(ruta_base, mods):
         partes = carpeta.rstrip(os.sep).split(os.sep)
         corte = base_depth + depth
         carpeta_agg = os.sep.join(partes[:corte + 1]) if len(partes) > corte else carpeta
-        d = pesos.setdefault(carpeta_agg, {'carpeta': carpeta_agg.replace('\\', '/'),
-                                           'bytes': 0, 'archivos': 0})
+        d = pesos.setdefault(carpeta_agg, {'folder': carpeta_agg.replace('\\', '/'),
+                                           'bytes': 0, 'files': 0})
         d['bytes'] += st.st_size
-        d['archivos'] += 1
+        d['files'] += 1
 
     items = list(pesos.values())
     for i in items:
-        i['tamaño'] = human_size(i['bytes'])
+        i['size'] = human_size(i['bytes'])
     items = _ordenar(items, mods.get('sort') or 'size desc',
                      key_size=lambda x: x['bytes'],
-                     key_time=lambda x: x['archivos'],
-                     key_name=lambda x: x['carpeta'].lower())
+                     key_time=lambda x: x['files'],
+                     key_name=lambda x: x['folder'].lower())
     top = mods.get('top')
     if top not in (None, ''):
         items = items[:int(top)]
 
     formato = (mods.get('format') or 'text').strip().lower()
     if formato == 'csv':
-        contenido = _csv_de([{'carpeta': i['carpeta'], 'bytes': i['bytes'],
-                              'tamaño': i['tamaño'], 'archivos': i['archivos']} for i in items])
+        contenido = _csv_de([{'folder': i['folder'], 'bytes': i['bytes'],
+                              'size': i['size'], 'files': i['files']} for i in items])
     elif formato == 'json':
         import json
         contenido = json.dumps(items, ensure_ascii=False, indent=2)
     else:
-        lineas = [f"--- PESO POR CARPETA (depth {depth}) ---"]
+        abbr = _t('ops_files_abbr')
+        lineas = [_t('ops_sizes_title', d=depth)]
         for i in items:
-            lineas.append(f"{i['tamaño']:>10}  {i['archivos']:>6} arch.  {i['carpeta']}")
+            lineas.append(f"{i['size']:>10}  {i['files']:>6} {abbr}  {i['folder']}")
         contenido = "\n".join(lineas)
     contenido = _quizas_output_to(contenido, mods, ruta, prefijo='sizes')
     return {'ok': True, 'contenido': contenido, 'results': items,
@@ -427,7 +437,7 @@ def export_sizes(ruta_base, mods):
 def export_duplicates(ruta_base, mods):
     ruta = os.path.abspath(ruta_base) if ruta_base else os.path.abspath('.')
     if not os.path.exists(ruta):
-        return {'ok': False, 'contenido': f"[ERROR] DUPLICATES: '{ruta}' no existe.",
+        return {'ok': False, 'contenido': _t('ops_err_no_exist', cmd='DUPLICATES', ruta=ruta),
                 'results': [], 'affected': 0, 'blocked': False}
 
     modo = (mods.get('by') or 'hash').strip().lower()
@@ -458,22 +468,23 @@ def export_duplicates(ruta_base, mods):
 
     duplicados = {k: v for k, v in grupos.items() if len(v) >= 2}
     results = []
-    lineas = [f"--- DUPLICADOS (por {modo}) ---"]
+    lineas = [_t('ops_dups_title', modo=modo)]
     total_recuperable = 0
     for (clave, tam), archivos in sorted(duplicados.items(), key=lambda kv: kv[0][1], reverse=True):
         recuperable = tam * (len(archivos) - 1)
         total_recuperable += recuperable
-        lineas.append(f"\n[{len(archivos)}x] {human_size(tam)} c/u  (recuperable: {human_size(recuperable)})")
+        lineas.append(_t('ops_dups_group_line', n=len(archivos),
+                         size=human_size(tam), r=human_size(recuperable)))
         for a in archivos:
             lineas.append(f"   {a.replace(chr(92), '/')}")
-        results.append({'clave': str(clave), 'tamaño': tam,
-                        'copias': len(archivos),
-                        'recuperable': recuperable,
-                        'archivos': [a.replace('\\', '/') for a in archivos]})
+        results.append({'key': str(clave), 'size': tam,
+                        'copies': len(archivos),
+                        'recoverable': recuperable,
+                        'files': [a.replace('\\', '/') for a in archivos]})
     if not results:
-        lineas.append("(sin duplicados con los filtros dados)")
+        lineas.append(_t('ops_dups_none'))
     else:
-        lineas.append(f"\nEspacio total recuperable si se deja 1 copia: {human_size(total_recuperable)}")
+        lineas.append(_t('ops_dups_recover', s=human_size(total_recuperable)))
 
     formato = (mods.get('format') or 'text').strip().lower()
     if formato == 'json':
@@ -482,10 +493,10 @@ def export_duplicates(ruta_base, mods):
     elif formato == 'csv':
         filas = []
         for r in results:
-            for a in r['archivos']:
-                filas.append({'grupo': r['clave'], 'copias': r['copias'],
-                              'bytes': r['tamaño'], 'archivo': a})
-        contenido = _csv_de(filas) if filas else "(sin duplicados)"
+            for a in r['files']:
+                filas.append({'group': r['key'], 'copies': r['copies'],
+                              'bytes': r['size'], 'file': a})
+        contenido = _csv_de(filas) if filas else _t('ops_dups_none2')
     else:
         contenido = "\n".join(lineas)
     contenido = _quizas_output_to(contenido, mods, ruta, prefijo='duplicados')
@@ -504,8 +515,7 @@ def _chequear_tope(cantidad, mods, config):
     tope = int(tope)
     confirm = _bool_mod(mods, 'confirm', False) or _bool_mod(config, 'confirm', False)
     if cantidad > tope and not confirm:
-        return False, (f"[BLOQUEADO] La operación afectaría {cantidad} archivos "
-                       f"(tope max_affected={tope}). Agregá 'confirm: true' para forzar.")
+        return False, _t('ops_blocked', n=cantidad, t=tope)
     return True, ""
 
 
@@ -540,33 +550,34 @@ def batch_move(ruta_destino, lineas, mods, config):
         return {'ok': False, 'contenido': msg, 'results': [], 'affected': 0, 'blocked': True}
 
     dry = _es_dry_run(mods, config)
+    dry_tag = _t('ops_dry_tag') if dry else ''
     results = []
-    lineas_out = [f"--- BATCH_MOVE {'(DRY RUN)' if dry else ''} : {len(pares)} archivos ---"]
+    lineas_out = [_t('ops_move_title', dry=dry_tag, n=len(pares))]
     exitos = 0
     for origen, dest in pares:
         estado, detalle = _mover_uno(origen, dest, dry)
         if estado == 'ok':
             exitos += 1
-        results.append({'cmd': 'BATCH_MOVE', 'origen': origen.replace('\\', '/'),
-                        'destino': dest.replace('\\', '/'), 'status': estado, 'detalle': detalle})
+        results.append({'cmd': 'BATCH_MOVE', 'source': origen.replace('\\', '/'),
+                        'dest': dest.replace('\\', '/'), 'status': estado, 'detail': detalle})
         lineas_out.append(f"  [{estado.upper()}] {origen.replace(chr(92), '/')} -> "
                           f"{dest.replace(chr(92), '/')}" + (f"  ({detalle})" if detalle else ""))
 
     if not dry:
         registrar_log('BATCH_MOVE', exitos,
-                      f"{len(pares)} solicitados -> {ruta_destino or 'mapeo explícito'}",
-                      'ok' if exitos == len(pares) else 'parcial')
+                      f"{len(pares)} requested -> {ruta_destino or 'explicit mapping'}",
+                      'ok' if exitos == len(pares) else 'partial')
     return {'ok': True, 'contenido': "\n".join(lineas_out), 'results': results,
             'affected': exitos, 'blocked': False}
 
 
 def _mover_uno(origen, dest, dry):
     if not os.path.exists(origen):
-        return 'error', 'origen no existe'
+        return 'error', _t('ops_d_src_missing')
     if os.path.exists(dest):
-        return 'skip', 'destino ya existe'
+        return 'skip', _t('ops_d_dest_exists')
     if dry:
-        return 'ok', 'simulado'
+        return 'ok', _t('ops_d_sim')
     try:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.move(origen, dest)
@@ -583,12 +594,12 @@ def batch_rename(ruta_base, mods, config):
     patron = mods.get('pattern')
     template = mods.get('template')
     if not patron or not template:
-        return {'ok': False, 'contenido': "[ERROR] BATCH_RENAME requiere 'pattern:' y 'template:'.",
+        return {'ok': False, 'contenido': _t('ops_rename_need'),
                 'results': [], 'affected': 0, 'blocked': False}
     try:
         rex = re.compile(patron)
     except re.error as e:
-        return {'ok': False, 'contenido': f"[ERROR] pattern inválido: {e}",
+        return {'ok': False, 'contenido': _t('ops_rename_badpat', e=e),
                 'results': [], 'affected': 0, 'blocked': False}
 
     candidatos = []
@@ -608,22 +619,23 @@ def batch_rename(ruta_base, mods, config):
         return {'ok': False, 'contenido': msg, 'results': [], 'affected': 0, 'blocked': True}
 
     dry = _es_dry_run(mods, config)
+    dry_tag = _t('ops_dry_tag') if dry else ''
     results = []
-    lineas_out = [f"--- BATCH_RENAME {'(DRY RUN)' if dry else ''} : {len(candidatos)} archivos ---"]
+    lineas_out = [_t('ops_rename_title', dry=dry_tag, n=len(candidatos))]
     exitos = 0
     for origen, dest in candidatos:
         estado, detalle = _mover_uno(origen, dest, dry)
         if estado == 'ok':
             exitos += 1
-        results.append({'cmd': 'BATCH_RENAME', 'origen': origen.replace('\\', '/'),
-                        'destino': dest.replace('\\', '/'), 'status': estado, 'detalle': detalle})
+        results.append({'cmd': 'BATCH_RENAME', 'source': origen.replace('\\', '/'),
+                        'dest': dest.replace('\\', '/'), 'status': estado, 'detail': detalle})
         lineas_out.append(f"  [{estado.upper()}] {os.path.basename(origen)} -> "
                           f"{os.path.basename(dest)}" + (f"  ({detalle})" if detalle else ""))
     if not candidatos:
-        lineas_out.append("(ningún archivo coincidió con el pattern)")
+        lineas_out.append(_t('ops_rename_none'))
     if not dry and exitos:
-        registrar_log('BATCH_RENAME', exitos, f"pattern={patron} en {ruta}",
-                      'ok' if exitos == len(candidatos) else 'parcial')
+        registrar_log('BATCH_RENAME', exitos, f"pattern={patron} in {ruta}",
+                      'ok' if exitos == len(candidatos) else 'partial')
     return {'ok': True, 'contenido': "\n".join(lineas_out), 'results': results,
             'affected': exitos, 'blocked': False}
 
@@ -654,38 +666,38 @@ def trash(ruta, lineas, mods, config):
         return {'ok': False, 'contenido': msg, 'results': [], 'affected': 0, 'blocked': True}
 
     dry = _es_dry_run(mods, config)
+    dry_tag = _t('ops_dry_tag') if dry else ''
     results = []
-    lineas_out = [f"--- TRASH {'(DRY RUN)' if dry else ''} : {len(objetivos)} objetivos ---"]
+    lineas_out = [_t('ops_trash_title', dry=dry_tag, n=len(objetivos))]
     if not _HAY_SEND2TRASH and not dry:
-        lineas_out.append("[WARN] 'send2trash' no está instalado: "
-                          "instalá con 'pip install send2trash' para borrado reversible.")
+        lineas_out.append(_t('ops_no_s2t_warn'))
     exitos = 0
     for obj in objetivos:
         estado, detalle = _trash_uno(obj, dry)
         if estado == 'ok':
             exitos += 1
         results.append({'cmd': 'TRASH', 'path': obj.replace('\\', '/'),
-                        'status': estado, 'detalle': detalle})
+                        'status': estado, 'detail': detalle})
         lineas_out.append(f"  [{estado.upper()}] {obj.replace(chr(92), '/')}"
                           + (f"  ({detalle})" if detalle else ""))
     if not objetivos:
-        lineas_out.append("(sin objetivos)")
+        lineas_out.append(_t('ops_no_targets'))
     if not dry and exitos:
-        registrar_log('TRASH', exitos, f"{ruta or 'lista'} "
-                      + (f"filtros={ {k: mods[k] for k in mods if k in ('only','older_than')} }"
+        registrar_log('TRASH', exitos, f"{ruta or 'list'} "
+                      + (f"filters={ {k: mods[k] for k in mods if k in ('only','older_than')} }"
                          if tiene_filtros else ''),
-                      'ok' if exitos == len(objetivos) else 'parcial')
+                      'ok' if exitos == len(objetivos) else 'partial')
     return {'ok': True, 'contenido': "\n".join(lineas_out), 'results': results,
             'affected': exitos, 'blocked': False}
 
 
 def _trash_uno(obj, dry):
     if not os.path.exists(obj):
-        return 'error', 'no existe'
+        return 'error', _t('ops_d_missing')
     if dry:
-        return 'ok', 'simulado'
+        return 'ok', _t('ops_d_sim')
     if not _HAY_SEND2TRASH:
-        return 'error', 'send2trash no instalado'
+        return 'error', _t('ops_d_no_s2t')
     try:
         send2trash(obj)
         return 'ok', ''

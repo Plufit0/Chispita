@@ -205,3 +205,18 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ============================================================
+#  Archivos locales / de sesión — NO publicar en el repo
+#  (config del usuario, historial, exports, notas de trabajo,
+#   batería de tests local)
+# ============================================================
+gui_config.json
+chispita_history.json
+temp_exports.json
+supertexto_temp.txt
+exports/
+.chispita/
+ESTADO.md
+CLAUDE.md
+tests/

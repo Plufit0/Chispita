@@ -68,6 +68,33 @@ def detectar_faltantes(base_dir):
             faltantes.append(pip_name)
     return faltantes
 
+
+def _pip_run(paquetes, extra=None):
+    """Corre pip install. Devuelve (returncode, salida)."""
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if extra:
+        cmd += extra
+    cmd += list(paquetes)
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    salida = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
+    return proc.returncode, salida
+
+
+def instalar_paquetes(paquetes):
+    """
+    Instala paquetes con estrategia robusta:
+      1) Forma normal (funciona en la mayoría, incluidos entornos virtuales).
+      2) Si falla, Plan B: 'pip install --user' (para máquinas con líos de
+         permisos). --user NO se usa primero porque rompe dentro de venvs.
+    Devuelve (ok, salida_combinada).
+    """
+    code, salida = _pip_run(paquetes)
+    if code == 0:
+        return True, salida
+    code2, salida2 = _pip_run(paquetes, extra=["--user"])
+    combinada = salida + "\n--- Plan B (--user) ---\n" + salida2
+    return code2 == 0, combinada
+
 class ChispitaGUI:
     def __init__(self, root):
         self.root = root
@@ -185,11 +212,9 @@ class ChispitaGUI:
 
         def worker():
             try:
-                proc = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", *faltantes],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                estado_pip['code'] = proc.returncode
-                estado_pip['out'] = proc.stdout.decode('utf-8', errors='replace') if proc.stdout else ""
+                ok, salida = instalar_paquetes(faltantes)
+                estado_pip['code'] = 0 if ok else 1
+                estado_pip['out'] = salida
             except Exception as e:
                 estado_pip['code'] = 1
                 estado_pip['out'] = str(e)

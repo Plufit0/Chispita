@@ -57,7 +57,7 @@ def chispita_cli(archivo_supertexto):
         dry_global = str(config.get('dry_run', '')).strip().lower() in ('true', '1', 'yes', 'si', 'sí')
         formato_global = (config.get('format') or 'text').strip().lower()
         if dry_global:
-            print("[INFO] MODO DRY RUN GLOBAL: no se modificará ningún archivo.")
+            print(translator.get('cli_dry_global'))
 
         print(f"{translator.get('cli_executing')} {len(comandos)} {translator.get('cli_ops')}")
         exports_a_guardar = []
@@ -88,7 +88,7 @@ def chispita_cli(archivo_supertexto):
 
                 elif c_type == 'ELIMINAR':
                     if dry_global or str(mods.get('dry_run', '')).lower() in ('true', '1', 'yes', 'si', 'sí'):
-                        print(f"[DRY RUN] ELIMINAR simularía borrar: {ruta}")
+                        print(f"{translator.get('cli_dry_delete')} {ruta}")
                         resultados_json.append({'cmd': 'ELIMINAR', 'path': ruta, 'status': 'dry_run'})
                     elif eliminar_archivo(ruta):
                         exito = True
@@ -128,9 +128,13 @@ def chispita_cli(archivo_supertexto):
                 print(f"{translator.get('cli_fail_cmd')} {c_type} ({ruta}): {e_cmd}")
                 resultados_json.append({'cmd': c_type, 'path': ruta, 'status': 'error', 'error': str(e_cmd)})
 
+        etiquetas_resumen = {'CREADO': translator.get('sum_created'),
+                             'ELIMINADO': translator.get('sum_deleted'),
+                             'REEMPLAZADO': translator.get('sum_replaced')}
         for tipo, archivos in resumen_exitos.items():
             if archivos:
-                print(f"[OK] {tipo} ({len(archivos)}): {'; '.join(a for a in archivos if a)}")
+                etiqueta = etiquetas_resumen.get(tipo, tipo)
+                print(f"[OK] {etiqueta} ({len(archivos)}): {'; '.join(a for a in archivos if a)}")
 
         # Auto-commit git (solo si hubo cambios reales y no es dry run)
         comandos_ejecutados = [c for c in COMANDOS_MODIFICADORES if c in contador_comandos]
@@ -207,7 +211,8 @@ def _ejecutar_destructivo(c_type, ruta, lineas, mods, config):
         return ops.batch_rename(ruta, mods, config)
     if c_type == 'TRASH':
         return ops.trash(ruta, lineas, mods, config)
-    return {'ok': False, 'contenido': f'[ERROR] Comando desconocido: {c_type}', 'results': []}
+    from chispita_core.i18n import translator
+    return {'ok': False, 'contenido': f"{translator.get('cli_unknown_cmd')} {c_type}", 'results': []}
 
 
 if __name__ == "__main__":
