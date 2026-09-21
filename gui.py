@@ -2,10 +2,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox, simpledialog
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import queue
+import importlib.util
 from datetime import datetime
 import hashlib
 from chispita_core.i18n import translator
@@ -23,6 +25,49 @@ UI_CONFIG = {
     "font_size": 10,
 }
 
+# ==========================================
+#   CHEQUEO DE REQUERIMIENTOS
+# ==========================================
+# Si el nombre del paquete de pip difiere del nombre de importación, mapearlo acá.
+IMPORT_OVERRIDES = {}
+
+
+def _leer_requerimientos(base_dir):
+    """Lee requirements.txt y devuelve los nombres de paquete (sin versión)."""
+    path = os.path.join(base_dir, "requirements.txt")
+    nombres = []
+    if not os.path.exists(path):
+        return nombres
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for linea in f:
+                linea = linea.strip()
+                if not linea or linea.startswith("#"):
+                    continue
+                nombre = re.split(r"[<>=!~; ]", linea, 1)[0].strip()
+                if nombre:
+                    nombres.append(nombre)
+    except Exception:
+        pass
+    return nombres
+
+
+def _nombre_import(pip_name):
+    return IMPORT_OVERRIDES.get(pip_name, pip_name.replace("-", "_"))
+
+
+def detectar_faltantes(base_dir):
+    """Devuelve la lista de paquetes de requirements.txt que NO están instalados."""
+    faltantes = []
+    for pip_name in _leer_requerimientos(base_dir):
+        try:
+            existe = importlib.util.find_spec(_nombre_import(pip_name)) is not None
+        except Exception:
+            existe = False
+        if not existe:
+            faltantes.append(pip_name)
+    return faltantes
+
 class ChispitaGUI:
     def __init__(self, root):
         self.root = root
@@ -39,17 +84,146 @@ class ChispitaGUI:
         self.blink_job = None
         self.history_data = {}
         self.recent_projects = []
-        
+        self.language_configured = False
+
         self.load_config()
-        self.translator.set_language(self.language) # Aplicar idioma cargado
-        
+        # Primer arranque (sin idioma guardado): elegir idioma ANTES de todo,
+        # así el cartel de requerimientos ya sale en el idioma correcto.
+        if not self.language_configured:
+            elegido = self._elegir_idioma_inicial()
+            self.language = elegido
+            self.translator.set_language(elegido)
+            self.save_config()
+        else:
+            self.translator.set_language(self.language) # Aplicar idioma cargado
+
         self.setup_window()
         self.load_history()
         self.create_widgets()
-        
+
         self.msg_queue = queue.Queue()
         self.check_queue()
+
+        # Recién ahora (con idioma ya definido) se chequean los requerimientos.
+        self.root.after(300, self.check_requirements)
         
+    def _elegir_idioma_inicial(self):
+        """Cartel de primer arranque: solo elegir idioma (English / Español)."""
+        self.root.withdraw()
+        dlg = tk.Toplevel(self.root)
+        dlg.title(self.translator.get('lang_chooser_title'))
+        dlg.geometry("360x200")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        resultado = {'lang': 'es'}
+
+        ttk.Label(dlg, text="Chispita", font=("Segoe UI", 20, "bold")).pack(pady=(26, 2))
+        ttk.Label(dlg, text=self.translator.get('lang_chooser_title'),
+                  font=("Segoe UI", 10)).pack(pady=(0, 18))
+
+        fr = ttk.Frame(dlg)
+        fr.pack()
+
+        def elegir(l):
+            resultado['lang'] = l
+            dlg.destroy()
+
+        ttk.Button(fr, text="English", width=15, command=lambda: elegir('en')).pack(side=tk.LEFT, padx=8)
+        ttk.Button(fr, text="Español", width=15, command=lambda: elegir('es')).pack(side=tk.LEFT, padx=8)
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: elegir('es'))
+        # Centrar sobre la pantalla
+        dlg.update_idletasks()
+        x = (dlg.winfo_screenwidth() - dlg.winfo_width()) // 2
+        y = (dlg.winfo_screenheight() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{x}+{y}")
+
+        self.root.wait_window(dlg)
+        self.root.deiconify()
+        return resultado['lang']
+
+    def check_requirements(self):
+        """Chequea requirements.txt; si falta algo, ofrece instalarlo."""
+        base = os.path.dirname(os.path.abspath(__file__))
+        faltantes = detectar_faltantes(base)
+        if faltantes:
+            self._dialogo_requerimientos(faltantes)
+        else:
+            self.log_output(self.translator.get('req_all_ok'))
+
+    def _dialogo_requerimientos(self, faltantes):
+        """Ventana con los requerimientos faltantes + botones Instalar / Ignorar."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(self.translator.get('req_dialog_title'))
+        dlg.geometry("440x340")
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text=self.translator.get('req_missing_header'),
+                  font=("Segoe UI", 10, "bold"), wraplength=400,
+                  justify=tk.LEFT).pack(anchor=tk.W, padx=16, pady=(16, 8))
+
+        lista = ttk.Frame(dlg)
+        lista.pack(fill=tk.X, padx=28)
+        for r in faltantes:
+            ttk.Label(lista, text=f"•  {r}", font=("Segoe UI", 11)).pack(anchor=tk.W, pady=1)
+
+        estado = ttk.Label(dlg, text="", font=("Segoe UI", 9), wraplength=400,
+                           justify=tk.LEFT, foreground="gray")
+        estado.pack(anchor=tk.W, padx=16, pady=(12, 0))
+
+        botones = ttk.Frame(dlg)
+        botones.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=16)
+        btn_ignorar = ttk.Button(botones, text=self.translator.get('req_ignore'), command=dlg.destroy)
+        btn_ignorar.pack(side=tk.RIGHT)
+        btn_instalar = ttk.Button(botones, text=self.translator.get('req_install'))
+        btn_instalar.pack(side=tk.RIGHT, padx=8)
+
+        estado_pip = {}
+
+        def worker():
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", *faltantes],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                estado_pip['code'] = proc.returncode
+                estado_pip['out'] = proc.stdout.decode('utf-8', errors='replace') if proc.stdout else ""
+            except Exception as e:
+                estado_pip['code'] = 1
+                estado_pip['out'] = str(e)
+            estado_pip['done'] = True
+
+        def poll():
+            if estado_pip.get('done'):
+                base = os.path.dirname(os.path.abspath(__file__))
+                aun_faltan = detectar_faltantes(base)
+                if not aun_faltan:
+                    estado.config(text=self.translator.get('req_install_ok'), foreground="green")
+                    self.log_output(self.translator.get('req_install_ok'))
+                    dlg.after(1400, dlg.destroy)
+                else:
+                    estado.config(
+                        text=f"{self.translator.get('req_install_partial')} {', '.join(aun_faltan)}",
+                        foreground="red")
+                    self.log_output(f"{self.translator.get('req_install_partial')} {', '.join(aun_faltan)}")
+                    btn_instalar.config(state=tk.NORMAL)
+                    btn_ignorar.config(state=tk.NORMAL)
+                return
+            dlg.after(300, poll)
+
+        def instalar():
+            btn_instalar.config(state=tk.DISABLED)
+            btn_ignorar.config(state=tk.DISABLED)
+            estado.config(text=self.translator.get('req_installing'), foreground="blue")
+            self.log_output(self.translator.get('req_log_installing'))
+            threading.Thread(target=worker, daemon=True).start()
+            dlg.after(300, poll)
+
+        btn_instalar.config(command=instalar)
+        self.root.wait_window(dlg)
+
     def load_history(self):
         if os.path.exists(self.history_file):
             try:
@@ -80,6 +254,7 @@ class ChispitaGUI:
                     # Cargar idioma guardado
                     if 'language' in config:
                         self.language = config['language']
+                        self.language_configured = True
                         
                     if 'recent_projects' in config:
                         self.recent_projects = config['recent_projects']
