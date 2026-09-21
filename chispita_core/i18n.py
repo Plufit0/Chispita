@@ -5,7 +5,7 @@ class Translator:
         # Lee el idioma del sistema si viene de la GUI, si no, usa el default
         self.language = os.environ.get('CHISPITA_LANG', language)
         self.data = {
-            'window_title': {'es': 'Chispita v1.0', 'en': 'Chispita v1.0'},
+            'window_title': {'es': 'Chispita v2.0', 'en': 'Chispita v2.0'},
             'help_button': {'es': 'Ayuda', 'en': 'Help'},
             'menu_copy_guide': {'es': 'Copiar Guía para IA', 'en': 'Copy AI Guide'},
             'help_dialog_title': {'es': 'Ayuda', 'en': 'Help'},
@@ -38,6 +38,15 @@ class Translator:
             'menu_export_folder': {'es': 'Exportar una Carpeta...', 'en': 'Export a Folder...'},
             'menu_tree_full': {'es': 'Listar Árbol de Archivos', 'en': 'View File Tree'},
             'menu_tree_folders': {'es': 'Listar Árbol de Carpetas', 'en': 'View Folder Tree'},
+            'menu_ordenar_titulo': {'es': '— Ordenar PC —', 'en': '— Tidy PC —'},
+            'menu_inventory': {'es': 'Inventario de Carpeta...', 'en': 'Folder Inventory...'},
+            'menu_sizes': {'es': 'Peso por Carpeta...', 'en': 'Size per Folder...'},
+            'menu_duplicates': {'es': 'Buscar Duplicados...', 'en': 'Find Duplicates...'},
+            'dialog_ordenar_msg': {'es': 'Ruta absoluta a analizar (ej. C:/Users/david/Downloads):',
+                                   'en': 'Absolute path to scan (e.g. C:/Users/david/Downloads):'},
+            'dialog_inventory_title': {'es': 'Inventario', 'en': 'Inventory'},
+            'dialog_sizes_title': {'es': 'Peso por Carpeta', 'en': 'Size per Folder'},
+            'dialog_duplicates_title': {'es': 'Duplicados', 'en': 'Duplicates'},
             'menu_git_commit': {'es': 'Guardar Cambios (Git Commit)...', 'en': 'Save Changes (Git Commit)...'},
             'log_project_set': {'es': '[INFO] Proyecto:', 'en': '[INFO] Project:'},
             'log_folder_open': {'es': '[INFO] Abriendo carpeta:', 'en': '[INFO] Opening folder:'},

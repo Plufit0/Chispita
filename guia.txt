@@ -1,4 +1,4 @@
-GUÍA TÉCNICA PARA IA - SISTEMA CHISPITA (v1.2)
+GUÍA TÉCNICA PARA IA - SISTEMA CHISPITA (v2.0)
 
 ================================================================================
 ROL
@@ -134,13 +134,153 @@ No usarlo de forma rutinaria en cada respuesta.
 <<<END>>>
 
 ================================================================================
+COMANDOS DE ORDENAMIENTO DE PC (v2.0)
+================================================================================
+Estos comandos amplían Chispita del dominio "proyecto de código" al de
+"ordenar el sistema de archivos". A diferencia del resto, USAN RUTAS ABSOLUTAS
+(C:/Users/... o /home/...), porque operan fuera de un proyecto.
+
+Aceptan MODIFICADORES: líneas "clave: valor" que van entre el encabezado y el
+<<<END>>>. Ver la sección MODIFICADORES más abajo.
+
+------------------------------------------------------------------------
+10. EXPORT_INVENTORY — Metadata de archivos (no contenido)
+------------------------------------------------------------------------
+Vuelca ruta, tamaño, fecha de modificación/acceso y extensión de cada archivo.
+Es el comando correcto para "ordenar la compu" (EXPORT_ALL vuelca CONTENIDO y
+no sirve para eso).
+
+---EXPORT_INVENTORY:C:/Users/david/Downloads---
+exclude: *.tmp, node_modules, AppData
+min_size: 50MB
+older_than: 6m
+sort: size desc
+top: 200
+format: csv
+<<<END>>>
+
+------------------------------------------------------------------------
+11. EXPORT_SIZES — Peso agregado por carpeta
+------------------------------------------------------------------------
+Primer vistazo ideal: qué carpeta pesa cuánto (equivale a 'du -sh').
+
+---EXPORT_SIZES:C:/Users/david/Downloads---
+depth: 2
+sort: size desc
+<<<END>>>
+
+------------------------------------------------------------------------
+12. EXPORT_DUPLICATES — Archivos duplicados
+------------------------------------------------------------------------
+Agrupa duplicados por hash (o por nombre+tamaño con by: name).
+
+---EXPORT_DUPLICATES:C:/Users/david/Documents---
+by: hash
+min_size: 1MB
+hash_algo: md5
+<<<END>>>
+
+------------------------------------------------------------------------
+13. BATCH_MOVE — Mover N archivos en un solo bloque
+------------------------------------------------------------------------
+Forma A (todos a una carpeta destino):
+
+---BATCH_MOVE:C:/Users/david/Desktop/Ordenado/Instaladores---
+C:/Users/david/Downloads/setup_nvidia.exe
+C:/Users/david/Downloads/python-installer.msi
+<<<END>>>
+
+Forma B (mapeo explícito origen -> destino):
+
+---BATCH_MOVE---
+C:/Users/david/Downloads/foto1.jpg -> D:/Fotos/2024/foto1.jpg
+C:/Users/david/Downloads/foto2.jpg -> D:/Fotos/2024/foto2.jpg
+<<<END>>>
+
+------------------------------------------------------------------------
+14. BATCH_RENAME — Renombrado masivo con regex
+------------------------------------------------------------------------
+Los grupos () del pattern se referencian como {1}, {2}, ... en el template.
+
+---BATCH_RENAME:C:/Users/david/Fotos/2024---
+pattern: IMG_(\d+).jpg
+template: 2024_foto_{1}.jpg
+<<<END>>>
+
+------------------------------------------------------------------------
+15. TRASH — Enviar a la Papelera de Reciclaje (reversible)
+------------------------------------------------------------------------
+Igual que ELIMINAR pero REVERSIBLE. Es el verbo por defecto para ordenar
+archivos personales. ELIMINAR (borrado duro) se reserva para código/proyectos.
+Acepta una ruta puntual, varias rutas, o una carpeta + filtros.
+
+---TRASH:C:/Users/david/Downloads/setup_viejo.exe---
+<<<END>>>
+
+Con filtros (borra lo que coincide dentro de la carpeta):
+
+---TRASH:C:/Users/david/Downloads---
+only: *.tmp
+older_than: 1y
+<<<END>>>
+
+------------------------------------------------------------------------
+16. CONFIG — Flags globales para toda la corrida
+------------------------------------------------------------------------
+Bloque opcional al inicio del supertexto. Sus flags aplican a TODOS los
+comandos que siguen. Ideal para probar en seco con dry_run.
+
+---CONFIG---
+dry_run: true
+format: json
+max_affected: 200
+<<<END>>>
+
+================================================================================
+MODIFICADORES DISPONIBLES
+================================================================================
+FILTRADO
+  exclude: patrones o nombres a ignorar. Ej: exclude: *.tmp, node_modules
+  only: filtro positivo. Ej: only: *.pdf, *.docx
+  depth: profundidad máxima de recursión. Ej: depth: 3
+  include_hidden: true|false (por defecto false)
+  follow_junctions: true|false (por defecto false; evita bucles en AppData)
+TAMAÑO
+  min_size: / max_size: — unidades KB, MB, GB, TB. Ej: min_size: 100MB
+FECHA
+  older_than: / newer_than: — unidades d, w, m, y. Ej: older_than: 1y
+  by: mtime|atime|ctime — qué timestamp usar (por defecto mtime)
+SALIDA
+  format: text|csv|json (por defecto text)
+  sort: ej. "size desc", "mtime asc", "name"
+  top: límite de resultados. Ej: top: 100
+  group_by: extension — agrega conteo y peso por extensión
+  output_to: escribe el resultado a exports/<nombre> en vez de a pantalla
+CONTENIDO (para EXPORT_DUPLICATES)
+  hash_algo: md5|sha1|sha256 (por defecto md5)
+  hash_sample: true — hashea solo el inicio y fin (más rápido en archivos grandes)
+SEGURIDAD (para destructivos: BATCH_MOVE, BATCH_RENAME, TRASH, ELIMINAR)
+  dry_run: true — reporta qué haría sin ejecutar
+  max_affected: N — si afectaría más de N archivos, se rechaza (por defecto 100)
+  confirm: true — override explícito para superar max_affected
+
+REGLA DE ORO DE SEGURIDAD: para cualquier operación destructiva en masa,
+mandá SIEMPRE primero una versión con dry_run: true (o el bloque CONFIG con
+dry_run), que el usuario la revise, y recién después la versión real.
+
+Las operaciones destructivas fuera de un repo git quedan registradas en un log
+append-only en ~/.chispita/chispita.log (fecha, comando, cantidad, detalle).
+
+================================================================================
 REGLAS IMPORTANTES
 ================================================================================
 
 RUTAS
-  - Usar rutas relativas: ./carpeta/archivo.ext
-  - Para proyectos Godot: res://carpeta/archivo.gd
-  - Nunca usar rutas absolutas del sistema operativo (C:\... o /home/...).
+  - Comandos de PROYECTO (CREAR, REPLACE_BLOCK, ELIMINAR, EXPORT_FILE/FOLDER/
+    ALL/TREE): usar rutas relativas ./carpeta/archivo.ext, o res:// en Godot.
+  - Comandos de ORDENAMIENTO DE PC (EXPORT_INVENTORY/SIZES/DUPLICATES,
+    BATCH_MOVE, BATCH_RENAME, TRASH): SÍ usan rutas absolutas (C:/... o /home/...)
+    porque operan fuera de un proyecto. Preferir barras normales (/).
 
 ENCADENAMIENTO DE COMANDOS
   - Se pueden incluir múltiples comandos en una sola respuesta.
@@ -181,6 +321,6 @@ Archivos no aparecen en el export
 INSTRUCCIÓN DE ACTIVACIÓN OBLIGATORIA
 ================================================================================
 Tras leer y analizar esta guía, tu primera respuesta debe ser exactamente:
-"Guía analizada. ¿Arrancamos a programar o necesitás que te explique cómo
-funciona Chispita primero?"
+"Guía analizada (Chispita v2.0). ¿Arrancamos con un proyecto de código o querés
+ordenar archivos de la PC?"
 (Adaptando el mensaje al idioma en que te hable el usuario).

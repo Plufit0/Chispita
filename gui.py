@@ -321,7 +321,7 @@ class ChispitaGUI:
             self.msg_queue.put(("LOG", out_str + err_str))
             
             import re
-            if re.search(r'---EXPORT_(ALL|FOLDER|FILE|TREE|TREE_FOLDERS)', original_commands):
+            if re.search(r'---EXPORT_(ALL|FOLDER|FILE|TREE|TREE_FOLDERS|INVENTORY|SIZES|DUPLICATES)', original_commands):
                 self.msg_queue.put(("CHECK_EXPORT", None))
                 
         except Exception as e:
@@ -445,6 +445,11 @@ class ChispitaGUI:
         menu.add_command(label=self.translator.get('menu_export_folder'), command=self.export_folder_ui)
         menu.add_command(label=self.translator.get('menu_tree_full'), command=self.export_tree)
         menu.add_command(label=self.translator.get('menu_tree_folders'), command=self.export_tree_folders)
+        menu.add_separator()
+        menu.add_command(label=self.translator.get('menu_ordenar_titulo'), state=tk.DISABLED)
+        menu.add_command(label=self.translator.get('menu_inventory'), command=self.export_inventory_ui)
+        menu.add_command(label=self.translator.get('menu_sizes'), command=self.export_sizes_ui)
+        menu.add_command(label=self.translator.get('menu_duplicates'), command=self.export_duplicates_ui)
         menu.add_separator()
         menu.add_command(label=self.translator.get('menu_git_commit'), command=self.git_commit_ui)
         menu.add_command(label=self.translator.get('menu_git_history'), command=self.git_history_ui)
@@ -698,6 +703,43 @@ class ChispitaGUI:
         self.commands_text.delete("1.0", tk.END)
         tag_end = "<<<" + "END>>>"
         self.commands_text.insert("1.0", f"---EXPORT_TREE_FOLDERS:.---\n{tag_end}")
+        self.execute_commands_direct()
+
+    def _pedir_ruta_absoluta(self, titulo):
+        """Pide una ruta absoluta para las operaciones de 'ordenar PC'."""
+        ruta = simpledialog.askstring(titulo, self.translator.get('dialog_ordenar_msg'))
+        if ruta:
+            ruta = ruta.strip().strip('"')
+        return ruta
+
+    def export_inventory_ui(self):
+        ruta = self._pedir_ruta_absoluta(self.translator.get('dialog_inventory_title'))
+        if not ruta:
+            return
+        self.commands_text.delete("1.0", tk.END)
+        tag_end = "<<<" + "END>>>"
+        self.commands_text.insert("1.0",
+            f"---EXPORT_INVENTORY:{ruta}---\nsort: size desc\ntop: 200\nformat: csv\n{tag_end}")
+        self.execute_commands_direct()
+
+    def export_sizes_ui(self):
+        ruta = self._pedir_ruta_absoluta(self.translator.get('dialog_sizes_title'))
+        if not ruta:
+            return
+        self.commands_text.delete("1.0", tk.END)
+        tag_end = "<<<" + "END>>>"
+        self.commands_text.insert("1.0",
+            f"---EXPORT_SIZES:{ruta}---\ndepth: 2\nsort: size desc\n{tag_end}")
+        self.execute_commands_direct()
+
+    def export_duplicates_ui(self):
+        ruta = self._pedir_ruta_absoluta(self.translator.get('dialog_duplicates_title'))
+        if not ruta:
+            return
+        self.commands_text.delete("1.0", tk.END)
+        tag_end = "<<<" + "END>>>"
+        self.commands_text.insert("1.0",
+            f"---EXPORT_DUPLICATES:{ruta}---\nby: hash\nmin_size: 1MB\n{tag_end}")
         self.execute_commands_direct()
 
     def git_commit_ui(self):
